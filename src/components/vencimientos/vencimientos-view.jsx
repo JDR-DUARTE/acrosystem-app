@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { buildWhatsappUrl } from "@/lib/whatsapp";
 import { useVencimientos } from "@/hooks/use-vencimientos";
 
 const TABS = [
@@ -43,9 +44,17 @@ export default function VencimientosView() {
     : "Clientes próximos a vencer";
   const fechaLabel = esExpirados ? "Venció" : "Vence";
 
-  function enviarAviso(e, nombre) {
+  function buildMensaje(v) {
+    const fecha = formatDate(v.fechaExpiracion);
+    if (esExpirados) {
+      return `Hola ${v.nombre}, esperamos te encuentres muy bien. Te escribimos de Acrofobia para recordarte que tu plan se venció el: ${fecha}. ¡Te esperamos para renovar y seguir escalando juntos!`;
+    }
+    return `Hola ${v.nombre}, esperamos te encuentres muy bien. Te escribimos de Acrofobia para recordarte que tu plan está próximo a vencer el ${fecha}. ¡Aprovecha para renovar y seguir escalando al máximo!`;
+  }
+
+  function sinTelefono(e, nombre) {
     e.stopPropagation();
-    toast.success(`Aviso registrado para ${nombre}.`);
+    toast.error(`${nombre} no tiene un teléfono registrado.`);
   }
 
   return (
@@ -128,14 +137,27 @@ export default function VencimientosView() {
                       {fechaLabel}: {formatDate(v.fechaExpiracion)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => enviarAviso(e, v.nombre)}
-                    className="flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-acro-text transition-colors hover:bg-white/5"
-                  >
-                    <MessageSquare className="size-4" />
-                    Aviso
-                  </button>
+                  {buildWhatsappUrl(v.telefono, buildMensaje(v)) ? (
+                    <a
+                      href={buildWhatsappUrl(v.telefono, buildMensaje(v))}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-acro-text transition-colors hover:bg-white/5"
+                    >
+                      <MessageSquare className="size-4" />
+                      Aviso
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => sinTelefono(e, v.nombre)}
+                      className="flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-acro-text transition-colors hover:bg-white/5"
+                    >
+                      <MessageSquare className="size-4" />
+                      Aviso
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

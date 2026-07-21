@@ -11,6 +11,7 @@ const SELECT = `
   pases_restantes,
   miembros!inner (
     id_persona,
+    telefono,
     personas!inner ( nombre_completo, cedula )
   ),
   planes ( nombre )
@@ -26,6 +27,7 @@ function mapRow(row) {
   return {
     id: row.id_suscripcion,
     miembroId: row.miembros?.id_persona,
+    telefono: row.miembros?.telefono ?? "",
     nombre: row.miembros?.personas?.nombre_completo ?? "",
     cedula: row.miembros?.personas?.cedula ?? "",
     fechaExpiracion: row.fecha_expiracion,
