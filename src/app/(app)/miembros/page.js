@@ -1,7 +1,11 @@
-import ModulePlaceholder from "@/components/layout/module-placeholder";
+import { listCategorias } from "@/lib/api/miembros";
+import MiembrosList from "@/components/miembros/miembros-list";
 
-export const metadata = { title: "Miembros · AcroSystem" };
+export const metadata = {
+  title: "Miembros · AcroSystem",
+};
 
-export default function MiembrosPage() {
-  return <ModulePlaceholder title="Miembros" />;
+export default async function MiembrosPage() {
+  const categorias = await listCategorias();
+  return <MiembrosList categorias={categorias} />;
 }
