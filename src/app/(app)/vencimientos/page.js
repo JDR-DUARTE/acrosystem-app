@@ -1,7 +1,9 @@
-import ModulePlaceholder from "@/components/layout/module-placeholder";
+import VencimientosView from "@/components/vencimientos/vencimientos-view";
 
-export const metadata = { title: "Vencimientos · AcroSystem" };
+export const metadata = {
+  title: "Vencimientos · AcroSystem",
+};
 
 export default function VencimientosPage() {
-  return <ModulePlaceholder title="Vencimientos" />;
+  return <VencimientosView />;
 }
