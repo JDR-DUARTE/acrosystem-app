@@ -8,6 +8,7 @@ import {
   QrCode,
 } from "lucide-react";
 import StatCard from "@/components/dashboard/stat-card";
+import DayCard from "@/components/dashboard/day-card";
 
 export const metadata = {
   title: "Dashboard · AcroSystem",
@@ -20,31 +21,42 @@ const STATS = [
   { label: "Record Semanal", value: 0, icon: Send },
 ];
 
+const DAYS = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+
+const CUPO_INFANTIL = 7;
+
 export default function DashboardPage() {
   return (
-    <section className="mx-auto w-full max-w-2xl pb-24">
-      <h1 className="mb-5 text-center text-2xl font-bold text-acro-text">
+    <section className="pb-24">
+      <h1 className="mb-6 text-3xl font-bold text-acro-text lg:text-4xl">
         Dashboard
       </h1>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {STATS.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
 
-      <div className="mt-6">
-        <div className="mb-3 flex items-center gap-2">
-          <CalendarDays className="size-5 text-acro-text" />
-          <h2 className="text-base font-medium text-acro-text">
+      <div className="mt-8">
+        <div className="mb-4 flex items-center gap-3">
+          <CalendarDays className="size-7 text-acro-accent" />
+          <h2 className="text-2xl font-semibold text-acro-text">
             Horario Infantil
           </h2>
         </div>
 
-        <div className="rounded-2xl bg-acro-surface p-4">
-          <p className="text-center text-sm text-acro-muted">
-            No hay miembros agendados todavía.
-          </p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {DAYS.map((day) => (
+            <DayCard key={day} day={day} cupo={CUPO_INFANTIL} members={[]} />
+          ))}
         </div>
       </div>
 
