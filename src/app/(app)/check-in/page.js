@@ -1,7 +1,7 @@
-import ModulePlaceholder from "@/components/layout/module-placeholder";
+import CheckinView from "@/components/checkin/checkin-view";
 
 export const metadata = { title: "Check-in · AcroSystem" };
 
 export default function CheckInPage() {
-  return <ModulePlaceholder title="Control de Acceso" />;
+  return <CheckinView />;
 }
