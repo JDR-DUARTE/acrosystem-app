@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import {
   listCategoriasProducto,
   listPromos,
@@ -15,6 +16,8 @@ export default async function TiendaPage() {
   ]);
 
   return (
-    <TiendaWizard categorias={categorias} promos={promos} planes={planes} />
+    <Suspense>
+      <TiendaWizard categorias={categorias} promos={promos} planes={planes} />
+    </Suspense>
   );
 }

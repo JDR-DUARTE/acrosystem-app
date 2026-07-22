@@ -17,8 +17,12 @@ const SELECT = `
   )
 `;
 
+function hoyVEStr() {
+  return new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function activeSubscription(suscripciones = []) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyVEStr();
   return (
     suscripciones.find(
       (s) => s.estado === "Activo" && s.fecha_expiracion >= today,
@@ -43,8 +47,10 @@ function mapMiembro(row) {
       ? { id: row.categorias.id_categoria, nombre: row.categorias.nombre }
       : null,
     estado: activa ? "Activo" : "Inactivo",
+    planId: activa?.planes?.id_plan ?? null,
     planActual: activa
       ? {
+          id: activa.planes?.id_plan ?? null,
           nombre: activa.planes?.nombre ?? "—",
           fechaInicio: activa.fecha_inicio,
           fechaExpiracion: activa.fecha_expiracion,
@@ -54,7 +60,7 @@ function mapMiembro(row) {
   };
 }
 
-export async function listMiembros({ search, categoria, estado } = {}) {
+export async function listMiembros({ search, plan, estado } = {}) {
   const supabase = await createClient();
   const { data, error } = await supabase.from("miembros").select(SELECT);
   if (error) throw new Error(error.message);
@@ -69,8 +75,8 @@ export async function listMiembros({ search, categoria, estado } = {}) {
         (m.cedula ?? "").toLowerCase().includes(q),
     );
   }
-  if (categoria) {
-    miembros = miembros.filter((m) => String(m.categoria?.id) === String(categoria));
+  if (plan) {
+    miembros = miembros.filter((m) => String(m.planId) === String(plan));
   }
   if (estado) {
     miembros = miembros.filter((m) => m.estado === estado);

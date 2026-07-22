@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,8 @@ function Field({ label, required, htmlFor, children }) {
 
 export default function MiembroForm({ categorias = [] }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const volverATienda = searchParams.get("returnTo") === "tienda";
   const createMiembro = useCreateMiembro();
   const [categoriaId, setCategoriaId] = useState(
     categorias[0] ? String(categorias[0].id) : "",
@@ -52,7 +54,14 @@ export default function MiembroForm({ categorias = [] }) {
     try {
       const { id } = await createMiembro.mutateAsync(input);
       toast.success("Miembro registrado correctamente.");
-      router.push(`/miembros/${id}`);
+      if (volverATienda) {
+        const nombre = String(input.nombre ?? "");
+        router.push(
+          `/tienda?nm=${encodeURIComponent(id)}&nmn=${encodeURIComponent(nombre)}`,
+        );
+      } else {
+        router.push(`/miembros/${id}`);
+      }
     } catch (error) {
       toast.error(error.message);
     }
@@ -65,7 +74,7 @@ export default function MiembroForm({ categorias = [] }) {
     <section className="mx-auto w-full max-w-2xl pb-24">
       <div className="mb-6 flex items-center gap-3">
         <Link
-          href="/miembros"
+          href={volverATienda ? "/tienda?restore=1" : "/miembros"}
           aria-label="Volver"
           className="rounded-md p-1 text-acro-text transition-colors hover:bg-white/5"
         >

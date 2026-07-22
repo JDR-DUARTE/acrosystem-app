@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  Activity,
+  LogIn,
   Home,
   Users,
   Send,
@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import StatCard from "@/components/dashboard/stat-card";
 import DayCard from "@/components/dashboard/day-card";
+import TasasPanel from "@/components/dashboard/tasas-panel";
 import { getDashboardStats } from "@/lib/api/dashboard";
+import { getTasasHoy } from "@/lib/api/tasas";
 
 export const metadata = {
   title: "Dashboard · AcroSystem",
@@ -27,12 +29,15 @@ const DAYS = [
 const CUPO_INFANTIL = 7;
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats();
+  const [stats, tasas] = await Promise.all([
+    getDashboardStats(),
+    getTasasHoy(),
+  ]);
   const cards = [
     {
       label: "Ingresos Hoy",
-      value: `$${stats.ingresosHoy.toFixed(2)}`,
-      icon: Activity,
+      value: stats.ingresosHoy,
+      icon: LogIn,
     },
     { label: "Miembros Activos", value: stats.miembrosActivos, icon: Home },
     { label: "Total Registrados", value: stats.totalRegistrados, icon: Users },
@@ -44,6 +49,8 @@ export default async function DashboardPage() {
       <h1 className="mb-6 text-3xl font-bold text-acro-text lg:text-4xl">
         Dashboard
       </h1>
+
+      <TasasPanel initial={tasas} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((stat) => (

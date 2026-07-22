@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
 import { getCurrentEmployee } from "@/lib/auth";
-import { listMiembros, createMiembro } from "@/lib/api/miembros";
+import { getTasasHoy, guardarTasasHoy } from "@/lib/api/tasas";
 
-export async function GET(request) {
+export async function GET() {
   const { employee } = await getCurrentEmployee();
   if (!employee) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
-
-  const { searchParams } = new URL(request.url);
   try {
-    const miembros = await listMiembros({
-      search: searchParams.get("search") ?? undefined,
-      plan: searchParams.get("plan") ?? undefined,
-      estado: searchParams.get("estado") ?? undefined,
-    });
-    return NextResponse.json({ miembros });
+    const tasas = await getTasasHoy();
+    return NextResponse.json({ tasas });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -35,8 +29,8 @@ export async function POST(request) {
   }
 
   try {
-    const result = await createMiembro(body);
-    return NextResponse.json(result, { status: 201 });
+    const tasas = await guardarTasasHoy(body);
+    return NextResponse.json({ tasas });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

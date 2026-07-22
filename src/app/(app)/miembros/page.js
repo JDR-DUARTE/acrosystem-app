@@ -1,4 +1,4 @@
-import { listCategorias } from "@/lib/api/miembros";
+import { listPlanes } from "@/lib/api/tienda";
 import MiembrosList from "@/components/miembros/miembros-list";
 
 export const metadata = {
@@ -6,6 +6,6 @@ export const metadata = {
 };
 
 export default async function MiembrosPage() {
-  const categorias = await listCategorias();
-  return <MiembrosList categorias={categorias} />;
+  const planes = await listPlanes();
+  return <MiembrosList planes={planes} />;
 }

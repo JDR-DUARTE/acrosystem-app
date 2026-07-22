@@ -18,15 +18,15 @@ import { useMiembros } from "@/hooks/use-miembros";
 
 const ALL = "todos";
 
-export default function MiembrosList({ categorias = [] }) {
+export default function MiembrosList({ planes = [] }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [categoria, setCategoria] = useState(ALL);
+  const [plan, setPlan] = useState(ALL);
   const [estado, setEstado] = useState(ALL);
 
   const { data: miembros, isLoading, isError, error } = useMiembros({
     search: search.trim() || undefined,
-    categoria: categoria === ALL ? undefined : categoria,
+    plan: plan === ALL ? undefined : plan,
     estado: estado === ALL ? undefined : estado,
   });
 
@@ -47,15 +47,15 @@ export default function MiembrosList({ categorias = [] }) {
           />
         </div>
 
-        <Select value={categoria} onValueChange={setCategoria}>
+        <Select value={plan} onValueChange={setPlan}>
           <SelectTrigger className="h-12 w-full bg-acro-surface md:w-48">
-            <SelectValue placeholder="Categoría" />
+            <SelectValue placeholder="Tipo de plan" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>Todas las categorías</SelectItem>
-            {categorias.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.nombre}
+            <SelectItem value={ALL}>Todos los planes</SelectItem>
+            {planes.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {p.nombre}
               </SelectItem>
             ))}
           </SelectContent>
@@ -77,7 +77,7 @@ export default function MiembrosList({ categorias = [] }) {
         <div className="grid grid-cols-[1.5fr_1fr_1fr_auto] gap-4 border-b border-border px-5 py-4 text-sm font-medium text-acro-muted">
           <span>Nombre</span>
           <span>Cédula</span>
-          <span>Categoría</span>
+          <span>Plan</span>
           <span>Estado</span>
         </div>
 
@@ -112,7 +112,7 @@ export default function MiembrosList({ categorias = [] }) {
                     {m.cedula || "—"}
                   </span>
                   <span className="truncate text-acro-muted">
-                    {m.categoria?.nombre ?? "—"}
+                    {m.planActual?.nombre ?? "—"}
                   </span>
                   <Badge
                     className={

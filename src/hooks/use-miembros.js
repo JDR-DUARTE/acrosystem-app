@@ -18,7 +18,7 @@ async function fetchJson(url, options) {
 export function useMiembros(filters = {}) {
   const params = new URLSearchParams();
   if (filters.search) params.set("search", filters.search);
-  if (filters.categoria) params.set("categoria", filters.categoria);
+  if (filters.plan) params.set("plan", filters.plan);
   if (filters.estado) params.set("estado", filters.estado);
   const qs = params.toString();
 

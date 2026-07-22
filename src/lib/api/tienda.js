@@ -110,7 +110,9 @@ export async function crearVenta(input) {
   if (productoIds.length > 0) {
     const { data, error: prodError } = await supabase
       .from("productos")
-      .select("id_producto, nombre, precio_venta_usd, stock_sistema")
+      .select(
+        "id_producto, nombre, precio_venta_usd, stock_sistema, categoria_producto ( nombre )",
+      )
       .in("id_producto", productoIds);
     if (prodError) throw new Error(prodError.message);
     productos = data ?? [];
@@ -122,13 +124,18 @@ export async function crearVenta(input) {
   for (const item of productItems) {
     const prod = byId.get(item.idProducto);
     if (!prod) throw new Error("Un producto del carrito ya no existe.");
-    const cantidad = Math.max(1, Number(item.cantidad) || 1);
-    if (prod.stock_sistema < cantidad) {
+    // Un alquiler no descuenta stock y siempre es una sola unidad por producto.
+    const esAlquiler =
+      (prod.categoria_producto?.nombre ?? "").toLowerCase() === "alquiler";
+    const cantidad = esAlquiler
+      ? 1
+      : Math.max(1, Number(item.cantidad) || 1);
+    if (!esAlquiler && prod.stock_sistema < cantidad) {
       throw new Error(`Stock insuficiente de "${prod.nombre}".`);
     }
     const precio = Number(prod.precio_venta_usd);
     subtotal += precio * cantidad;
-    detalle.push({ prod, cantidad, precio });
+    detalle.push({ prod, cantidad, precio, esAlquiler });
   }
 
   // Cargar planes reales.
@@ -189,19 +196,22 @@ export async function crearVenta(input) {
       id_producto: d.prod.id_producto,
       cantidad: d.cantidad,
       precio_unit_usd: d.precio,
-      tipo_item: "Producto",
+      tipo_item: d.esAlquiler ? "Alquiler" : "Producto",
     });
-    await supabase
-      .from("productos")
-      .update({ stock_sistema: d.prod.stock_sistema - d.cantidad })
-      .eq("id_producto", d.prod.id_producto);
-    await supabase.from("movimientos_inventario").insert({
-      id_producto: d.prod.id_producto,
-      id_empleado: employee.id_persona,
-      tipo_movimiento: "Venta",
-      cantidad: -d.cantidad,
-      id_venta_relacionada: venta.id_venta,
-    });
+    // Los alquileres no afectan el stock (el producto se devuelve).
+    if (!d.esAlquiler) {
+      await supabase
+        .from("productos")
+        .update({ stock_sistema: d.prod.stock_sistema - d.cantidad })
+        .eq("id_producto", d.prod.id_producto);
+      await supabase.from("movimientos_inventario").insert({
+        id_producto: d.prod.id_producto,
+        id_empleado: employee.id_persona,
+        tipo_movimiento: "Venta",
+        cantidad: -d.cantidad,
+        id_venta_relacionada: venta.id_venta,
+      });
+    }
   }
 
   // Detalle de planes + creación de la suscripción del miembro.

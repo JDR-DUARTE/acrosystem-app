@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -13,6 +14,7 @@ import {
   Loader2,
   Handshake,
   Ticket,
+  UserPlus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +34,7 @@ const FORMAS_PAGO = ["Efectivo", "Transferencia", "Pago móvil", "Tarjeta", "Zel
 const CATEGORIAS_PRECIO = ["Regular", "Miembro", "Empleado"];
 const STEPS = ["Tienda", "Detalle de venta", "Datos y pago"];
 const PLANES_KEY = "planes";
+const DRAFT_KEY = "tienda-draft";
 
 function money(n) {
   return `$${Number(n || 0).toFixed(2)}`;
@@ -63,9 +66,14 @@ function Stepper({ value, onDecrement, onIncrement }) {
   );
 }
 
+function esAlquiler(producto) {
+  return (producto.categoria?.nombre ?? "").toLowerCase() === "alquiler";
+}
+
 function ProductCard({ producto, onAdd }) {
   const [qty, setQty] = useState(1);
-  const agotado = producto.stock <= 0;
+  const alquiler = esAlquiler(producto);
+  const agotado = !alquiler && producto.stock <= 0;
   return (
     <article className="flex flex-col gap-2 rounded-2xl bg-acro-surface p-4">
       <h3 className="font-semibold text-acro-text">{producto.nombre}</h3>
@@ -73,17 +81,23 @@ function ProductCard({ producto, onAdd }) {
         {producto.descripcion || "—"}
       </p>
       <p className="text-xl font-bold text-acro-text">{money(producto.precio)}</p>
-      <p className="text-xs text-acro-muted">Stock: {producto.stock}</p>
+      <p className="text-xs text-acro-muted">
+        {alquiler ? "Alquiler · 1 unidad" : `Stock: ${producto.stock}`}
+      </p>
       <div className="mt-auto flex items-center justify-between pt-2">
-        <Stepper
-          value={qty}
-          onDecrement={() => setQty((q) => Math.max(1, q - 1))}
-          onIncrement={() => setQty((q) => Math.min(producto.stock, q + 1))}
-        />
+        {alquiler ? (
+          <span className="text-sm text-acro-muted">1 unidad</span>
+        ) : (
+          <Stepper
+            value={qty}
+            onDecrement={() => setQty((q) => Math.max(1, q - 1))}
+            onIncrement={() => setQty((q) => Math.min(producto.stock, q + 1))}
+          />
+        )}
         <button
           type="button"
           disabled={agotado}
-          onClick={() => onAdd(qty)}
+          onClick={() => onAdd(alquiler ? 1 : qty)}
           aria-label={`Agregar ${producto.nombre}`}
           className="flex size-10 items-center justify-center rounded-lg bg-acro-accent text-acro-dark hover:scale-105 disabled:opacity-40"
         >
@@ -136,6 +150,55 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
   const [idPromo, setIdPromo] = useState("");
   const [ventaOk, setVentaOk] = useState(null);
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Al volver desde "Agregar miembro" se restaura el carrito y, si se creó un
+  // miembro, queda seleccionado en el paso de pago. Es una hidratación puntual
+  // desde sessionStorage/URL al montar, por eso se ejecuta dentro del efecto.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const nuevoId = searchParams.get("nm");
+    const nuevoNombre = searchParams.get("nmn");
+    const restore = searchParams.get("restore");
+    if (!nuevoId && !restore) return;
+
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (Array.isArray(draft.cart)) setCart(draft.cart);
+        if (draft.moneda) setMoneda(draft.moneda);
+        if (draft.formaPago) setFormaPago(draft.formaPago);
+        if (typeof draft.idPromo === "string") setIdPromo(draft.idPromo);
+        if (draft.categoriaPrecio) setCategoriaPrecio(draft.categoriaPrecio);
+      }
+    } catch {
+      // Borrador inválido: se ignora.
+    }
+    sessionStorage.removeItem(DRAFT_KEY);
+
+    if (nuevoId) {
+      setMiembro({ id: nuevoId, nombre: nuevoNombre || "Miembro" });
+    }
+    setStep(3);
+    router.replace("/tienda");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  function irACrearMiembro() {
+    try {
+      sessionStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ cart, moneda, formaPago, idPromo, categoriaPrecio }),
+      );
+    } catch {
+      // Sin sessionStorage no se persiste el borrador, pero igual se navega.
+    }
+    router.push("/miembros/nuevo?returnTo=tienda");
+  }
+
   const isPlanes = selected === PLANES_KEY;
   const crearVenta = useCrearVenta();
   const { data: productos, isLoading } = useProductos({
@@ -160,9 +223,12 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
 
   function addProducto(producto, qty) {
     const key = `prod-${producto.id}`;
+    const alquiler = esAlquiler(producto);
     setCart((prev) => {
       const found = prev.find((i) => i.key === key);
       if (found) {
+        // Un alquiler siempre queda en 1 unidad.
+        if (alquiler) return prev;
         return prev.map((i) =>
           i.key === key
             ? { ...i, cantidad: Math.min(producto.stock, i.cantidad + qty) }
@@ -173,12 +239,12 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
         ...prev,
         {
           key,
-          kind: "producto",
+          kind: alquiler ? "alquiler" : "producto",
           id: producto.id,
           nombre: producto.nombre,
           precio: producto.precio,
           stock: producto.stock,
-          cantidad: qty,
+          cantidad: alquiler ? 1 : qty,
         },
       ];
     });
@@ -463,6 +529,16 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
               {hasPlan && <span className="text-acro-accent">*</span>}
             </Label>
             <MemberCombobox value={miembro} onChange={setMiembro} />
+            {!miembro && (
+              <button
+                type="button"
+                onClick={irACrearMiembro}
+                className="flex items-center gap-1.5 self-start text-sm font-medium text-acro-accent hover:underline"
+              >
+                <UserPlus className="size-4" />
+                ¿No está registrado? Agregar miembro
+              </button>
+            )}
           </div>
 
           <fieldset className="rounded-xl border border-border p-4">
