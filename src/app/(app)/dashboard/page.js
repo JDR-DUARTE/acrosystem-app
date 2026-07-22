@@ -10,7 +10,7 @@ import {
 import StatCard from "@/components/dashboard/stat-card";
 import DayCard from "@/components/dashboard/day-card";
 import TasasPanel from "@/components/dashboard/tasas-panel";
-import { getDashboardStats } from "@/lib/api/dashboard";
+import { getDashboardStats, getHorarioInfantil } from "@/lib/api/dashboard";
 import { getTasasHoy } from "@/lib/api/tasas";
 
 export const metadata = {
@@ -29,9 +29,10 @@ const DAYS = [
 const CUPO_INFANTIL = 7;
 
 export default async function DashboardPage() {
-  const [stats, tasas] = await Promise.all([
+  const [stats, tasas, horario] = await Promise.all([
     getDashboardStats(),
     getTasasHoy(),
+    getHorarioInfantil(),
   ]);
   const cards = [
     {
@@ -68,7 +69,12 @@ export default async function DashboardPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {DAYS.map((day) => (
-            <DayCard key={day} day={day} cupo={CUPO_INFANTIL} members={[]} />
+            <DayCard
+              key={day}
+              day={day}
+              cupo={CUPO_INFANTIL}
+              members={horario[day] ?? []}
+            />
           ))}
         </div>
       </div>

@@ -41,7 +41,9 @@ export async function listPlanes() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("planes")
-    .select("id_plan, nombre, precio_usd, pases_totales, duracion_dias")
+    .select(
+      "id_plan, nombre, precio_usd, pases_totales, duracion_dias, requiere_agenda",
+    )
     .order("precio_usd");
   if (error) throw new Error(error.message);
   return (data ?? []).map((p) => ({
@@ -50,6 +52,7 @@ export async function listPlanes() {
     precio: Number(p.precio_usd ?? 0),
     pasesTotales: p.pases_totales ?? 0,
     duracionDias: p.duracion_dias ?? 0,
+    requiereAgenda: Boolean(p.requiere_agenda),
   }));
 }
 
@@ -144,7 +147,9 @@ export async function crearVenta(input) {
   if (planIds.length > 0) {
     const { data, error: planError } = await supabase
       .from("planes")
-      .select("id_plan, nombre, precio_usd, pases_totales, duracion_dias")
+      .select(
+        "id_plan, nombre, precio_usd, pases_totales, duracion_dias, requiere_agenda",
+      )
       .in("id_plan", planIds);
     if (planError) throw new Error(planError.message);
     planes = data ?? [];
@@ -156,7 +161,17 @@ export async function crearVenta(input) {
     if (!plan) throw new Error("Un plan del carrito ya no existe.");
     const precio = Number(plan.precio_usd);
     subtotal += precio;
-    detallePlanes.push({ plan, precio });
+    // Para planes de niños se agendan los días de asistencia en la semana.
+    const dias =
+      plan.requiere_agenda && Array.isArray(item.dias)
+        ? item.dias.filter((d) => typeof d === "string" && d.trim())
+        : [];
+    if (plan.requiere_agenda && dias.length === 0) {
+      throw new Error(
+        `Selecciona los días de asistencia para "${plan.nombre}".`,
+      );
+    }
+    detallePlanes.push({ plan, precio, dias });
   }
 
   // Promoción (descuento porcentual sobre el subtotal).
@@ -226,14 +241,29 @@ export async function crearVenta(input) {
     const inicio = new Date();
     const expira = new Date(inicio);
     expira.setDate(expira.getDate() + (dp.plan.duracion_dias ?? 0));
-    await supabase.from("suscripciones").insert({
-      id_miembro: input.idMiembro,
-      id_plan: dp.plan.id_plan,
-      fecha_inicio: inicio.toISOString().slice(0, 10),
-      fecha_expiracion: expira.toISOString().slice(0, 10),
-      pases_restantes: dp.plan.pases_totales ?? 0,
-      estado: "Activo",
-    });
+    const { data: suscripcion, error: subError } = await supabase
+      .from("suscripciones")
+      .insert({
+        id_miembro: input.idMiembro,
+        id_plan: dp.plan.id_plan,
+        fecha_inicio: inicio.toISOString().slice(0, 10),
+        fecha_expiracion: expira.toISOString().slice(0, 10),
+        pases_restantes: dp.plan.pases_totales ?? 0,
+        estado: "Activo",
+      })
+      .select("id_suscripcion")
+      .single();
+    if (subError) throw new Error(subError.message);
+
+    if (dp.dias.length > 0 && suscripcion) {
+      await supabase.from("suscripcion_dias").insert(
+        dp.dias.map((dia) => ({
+          id_suscripcion: suscripcion.id_suscripcion,
+          dia_semana: dia,
+          tipo_dia: "Fijo",
+        })),
+      );
+    }
   }
 
   return {

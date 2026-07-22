@@ -32,6 +32,14 @@ import MemberCombobox from "@/components/tienda/member-combobox";
 const MONEDAS = ["COP", "VES", "USD", "EUR", "USDT"];
 const FORMAS_PAGO = ["Efectivo", "Transferencia", "Pago móvil", "Tarjeta", "Zelle"];
 const CATEGORIAS_PRECIO = ["Regular", "Miembro", "Empleado"];
+const DIAS_SEMANA = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
 const STEPS = ["Tienda", "Detalle de venta", "Datos y pago"];
 const PLANES_KEY = "planes";
 const DRAFT_KEY = "tienda-draft";
@@ -264,6 +272,8 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
           nombre: plan.nombre,
           precio: plan.precio,
           cantidad: 1,
+          requiereAgenda: Boolean(plan.requiereAgenda),
+          dias: [],
         },
       ];
     });
@@ -290,9 +300,33 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
     setCart((prev) => prev.filter((i) => i.key !== key));
   }
 
+  function toggleDia(key, dia) {
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.key !== key) return i;
+        const dias = i.dias ?? [];
+        return {
+          ...i,
+          dias: dias.includes(dia)
+            ? dias.filter((d) => d !== dia)
+            : [...dias, dia],
+        };
+      }),
+    );
+  }
+
+  const planesConAgenda = cart.filter(
+    (i) => i.kind === "plan" && i.requiereAgenda,
+  );
+
   async function confirmar() {
     if (hasPlan && !miembro) {
       toast.error("Selecciona el miembro para vender un plan.");
+      return;
+    }
+    const sinDias = planesConAgenda.find((i) => (i.dias ?? []).length === 0);
+    if (sinDias) {
+      toast.error(`Selecciona los días de asistencia para "${sinDias.nombre}".`);
       return;
     }
     try {
@@ -303,7 +337,11 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
         idPromo: idPromo ? Number(idPromo) : null,
         items: cart.map((i) =>
           i.kind === "plan"
-            ? { idPlan: i.id, cantidad: 1 }
+            ? {
+                idPlan: i.id,
+                cantidad: 1,
+                ...(i.requiereAgenda ? { dias: i.dias ?? [] } : {}),
+              }
             : { idProducto: i.id, cantidad: i.cantidad },
         ),
       });
@@ -540,6 +578,37 @@ export default function TiendaWizard({ categorias = [], promos = [], planes = []
               </button>
             )}
           </div>
+
+          {planesConAgenda.map((i) => (
+            <fieldset
+              key={i.key}
+              className="rounded-xl border border-border p-4"
+            >
+              <legend className="px-1 text-base font-semibold text-acro-text">
+                Días de asistencia · {i.nombre}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {DIAS_SEMANA.map((dia) => {
+                  const activo = (i.dias ?? []).includes(dia);
+                  return (
+                    <button
+                      key={dia}
+                      type="button"
+                      onClick={() => toggleDia(i.key, dia)}
+                      className={cn(
+                        "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        activo
+                          ? "bg-acro-accent text-acro-dark"
+                          : "bg-acro-dark text-acro-text hover:bg-white/10",
+                      )}
+                    >
+                      {dia}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
 
           <fieldset className="rounded-xl border border-border p-4">
             <legend className="px-1 text-base font-semibold text-acro-text">

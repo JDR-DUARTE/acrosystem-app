@@ -36,3 +36,32 @@ export async function getDashboardStats() {
     accesosSemana: checkinsRes.count ?? 0,
   };
 }
+
+// Nombres de los niños agendados por día de la semana (planes con agenda).
+export async function getHorarioInfantil() {
+  const supabase = await createClient();
+  const hoyStr = hoyVE();
+
+  const { data, error } = await supabase
+    .from("suscripcion_dias")
+    .select(
+      `dia_semana,
+       suscripciones!inner (
+         estado, fecha_expiracion,
+         miembros ( personas ( nombre_completo ) )
+       )`,
+    );
+  if (error) throw new Error(error.message);
+
+  const porDia = {};
+  for (const row of data ?? []) {
+    const sus = row.suscripciones;
+    if (!sus) continue;
+    if (sus.estado !== "Activo") continue;
+    if (sus.fecha_expiracion && sus.fecha_expiracion < hoyStr) continue;
+    const nombre = sus.miembros?.personas?.nombre_completo;
+    if (!nombre) continue;
+    (porDia[row.dia_semana] ??= []).push(nombre);
+  }
+  return porDia;
+}
