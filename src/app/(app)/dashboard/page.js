@@ -9,17 +9,11 @@ import {
 } from "lucide-react";
 import StatCard from "@/components/dashboard/stat-card";
 import DayCard from "@/components/dashboard/day-card";
+import { getDashboardStats } from "@/lib/api/dashboard";
 
 export const metadata = {
   title: "Dashboard · AcroSystem",
 };
-
-const STATS = [
-  { label: "Ingresos Hoy", value: 0, icon: Activity },
-  { label: "Miembros Activos", value: 0, icon: Home },
-  { label: "Total Registrados", value: 0, icon: Users },
-  { label: "Record Semanal", value: 0, icon: Send },
-];
 
 const DAYS = [
   "Lunes",
@@ -32,7 +26,19 @@ const DAYS = [
 
 const CUPO_INFANTIL = 7;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const stats = await getDashboardStats();
+  const cards = [
+    {
+      label: "Ingresos Hoy",
+      value: `$${stats.ingresosHoy.toFixed(2)}`,
+      icon: Activity,
+    },
+    { label: "Miembros Activos", value: stats.miembrosActivos, icon: Home },
+    { label: "Total Registrados", value: stats.totalRegistrados, icon: Users },
+    { label: "Accesos (7 días)", value: stats.accesosSemana, icon: Send },
+  ];
+
   return (
     <section className="pb-24">
       <h1 className="mb-6 text-3xl font-bold text-acro-text lg:text-4xl">
@@ -40,7 +46,7 @@ export default function DashboardPage() {
       </h1>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {STATS.map((stat) => (
+        {cards.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
