@@ -11,6 +11,8 @@ import {
   Plus,
   CheckCircle2,
   Loader2,
+  Handshake,
+  Ticket,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,11 +25,13 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProductos, useCrearVenta } from "@/hooks/use-tienda";
+import MemberCombobox from "@/components/tienda/member-combobox";
 
 const MONEDAS = ["COP", "VES", "USD", "EUR", "USDT"];
 const FORMAS_PAGO = ["Efectivo", "Transferencia", "Pago móvil", "Tarjeta", "Zelle"];
 const CATEGORIAS_PRECIO = ["Regular", "Miembro", "Empleado"];
 const STEPS = ["Tienda", "Detalle de venta", "Datos y pago"];
+const PLANES_KEY = "planes";
 
 function money(n) {
   return `$${Number(n || 0).toFixed(2)}`;
@@ -79,7 +83,7 @@ function ProductCard({ producto, onAdd }) {
         <button
           type="button"
           disabled={agotado}
-          onClick={() => onAdd(producto, qty)}
+          onClick={() => onAdd(qty)}
           aria-label={`Agregar ${producto.nombre}`}
           className="flex size-10 items-center justify-center rounded-lg bg-acro-accent text-acro-dark hover:scale-105 disabled:opacity-40"
         >
@@ -90,25 +94,59 @@ function ProductCard({ producto, onAdd }) {
   );
 }
 
-export default function TiendaWizard({ categorias = [], promos = [], miembros = [] }) {
+function PlanCard({ plan, onAdd, added }) {
+  return (
+    <article className="flex flex-col gap-2 rounded-2xl bg-acro-surface p-4">
+      <h3 className="font-semibold text-acro-text">{plan.nombre}</h3>
+      <p className="text-sm text-acro-muted">
+        {plan.pasesTotales > 0 ? `${plan.pasesTotales} pases · ` : ""}
+        {plan.duracionDias} días
+      </p>
+      <p className="text-xl font-bold text-acro-text">{money(plan.precio)}</p>
+      <div className="mt-auto flex items-center justify-end pt-2">
+        <button
+          type="button"
+          disabled={added}
+          onClick={onAdd}
+          aria-label={`Agregar ${plan.nombre}`}
+          className="flex size-10 items-center justify-center rounded-lg bg-acro-accent text-acro-dark hover:scale-105 disabled:opacity-40"
+        >
+          <ShoppingCart className="size-5" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
+export default function TiendaWizard({ categorias = [], promos = [], planes = [] }) {
+  const cards = [
+    { key: PLANES_KEY, nombre: "Planes", icon: Ticket },
+    ...categorias.map((c) => ({ key: c.id, nombre: c.nombre, icon: Handshake })),
+  ];
+
   const [step, setStep] = useState(1);
   const [search, setSearch] = useState("");
-  const [categoria, setCategoria] = useState(null);
+  const [selected, setSelected] = useState(cards[0]?.key ?? PLANES_KEY);
   const [cart, setCart] = useState([]);
 
-  const [tipoVenta, setTipoVenta] = useState("Externa");
   const [categoriaPrecio, setCategoriaPrecio] = useState("Regular");
-  const [idMiembro, setIdMiembro] = useState("");
+  const [miembro, setMiembro] = useState(null);
   const [moneda, setMoneda] = useState("USD");
   const [formaPago, setFormaPago] = useState("Efectivo");
   const [idPromo, setIdPromo] = useState("");
   const [ventaOk, setVentaOk] = useState(null);
 
+  const isPlanes = selected === PLANES_KEY;
   const crearVenta = useCrearVenta();
   const { data: productos, isLoading } = useProductos({
-    search: search.trim() || undefined,
-    categoria: categoria ?? undefined,
+    search: !isPlanes && search.trim() ? search.trim() : undefined,
+    categoria: !isPlanes ? selected : undefined,
   });
+
+  const planesFiltrados = useMemo(() => {
+    const t = search.trim().toLowerCase();
+    return t ? planes.filter((p) => p.nombre.toLowerCase().includes(t)) : planes;
+  }, [planes, search]);
 
   const subtotal = useMemo(
     () => cart.reduce((acc, i) => acc + i.precio * i.cantidad, 0),
@@ -118,13 +156,15 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
   const descuento = promo ? subtotal * (promo.valorDescuento / 100) : 0;
   const total = Math.max(0, subtotal - descuento);
   const totalItems = cart.reduce((acc, i) => acc + i.cantidad, 0);
+  const hasPlan = cart.some((i) => i.kind === "plan");
 
-  function addToCart(producto, qty) {
+  function addProducto(producto, qty) {
+    const key = `prod-${producto.id}`;
     setCart((prev) => {
-      const found = prev.find((i) => i.id === producto.id);
+      const found = prev.find((i) => i.key === key);
       if (found) {
         return prev.map((i) =>
-          i.id === producto.id
+          i.key === key
             ? { ...i, cantidad: Math.min(producto.stock, i.cantidad + qty) }
             : i,
         );
@@ -132,6 +172,8 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
       return [
         ...prev,
         {
+          key,
+          kind: "producto",
           id: producto.id,
           nombre: producto.nombre,
           precio: producto.precio,
@@ -143,29 +185,61 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
     toast.success(`${producto.nombre} agregado.`);
   }
 
-  function setQty(id, cantidad) {
+  function addPlan(plan) {
+    const key = `plan-${plan.id}`;
+    setCart((prev) => {
+      if (prev.some((i) => i.key === key)) return prev;
+      return [
+        ...prev,
+        {
+          key,
+          kind: "plan",
+          id: plan.id,
+          nombre: plan.nombre,
+          precio: plan.precio,
+          cantidad: 1,
+        },
+      ];
+    });
+    toast.success(`${plan.nombre} agregado.`);
+  }
+
+  function setQty(key, cantidad) {
     setCart((prev) =>
       prev.map((i) =>
-        i.id === id
-          ? { ...i, cantidad: Math.max(1, Math.min(i.stock, cantidad)) }
+        i.key === key
+          ? {
+              ...i,
+              cantidad: Math.max(
+                1,
+                Math.min(i.kind === "plan" ? 1 : i.stock, cantidad),
+              ),
+            }
           : i,
       ),
     );
   }
 
-  function removeFromCart(id) {
-    setCart((prev) => prev.filter((i) => i.id !== id));
+  function removeFromCart(key) {
+    setCart((prev) => prev.filter((i) => i.key !== key));
   }
 
   async function confirmar() {
+    if (hasPlan && !miembro) {
+      toast.error("Selecciona el miembro para vender un plan.");
+      return;
+    }
     try {
       const res = await crearVenta.mutateAsync({
-        tipoVenta,
-        idMiembro: idMiembro || null,
+        idMiembro: miembro?.id ?? null,
         moneda,
         formaPago,
         idPromo: idPromo ? Number(idPromo) : null,
-        items: cart.map((i) => ({ idProducto: i.id, cantidad: i.cantidad })),
+        items: cart.map((i) =>
+          i.kind === "plan"
+            ? { idPlan: i.id, cantidad: 1 }
+            : { idProducto: i.id, cantidad: i.cantidad },
+        ),
       });
       setVentaOk(res);
       setCart([]);
@@ -177,9 +251,8 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
   function nuevaVenta() {
     setVentaOk(null);
     setStep(1);
-    setIdMiembro("");
+    setMiembro(null);
     setIdPromo("");
-    setTipoVenta("Externa");
     setMoneda("USD");
     setFormaPago("Efectivo");
   }
@@ -204,7 +277,7 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
   }
 
   return (
-    <section className="mx-auto w-full max-w-3xl pb-24">
+    <section className="mx-auto w-full max-w-4xl pb-24">
       <header className="mb-4 flex items-center gap-3">
         {step > 1 && (
           <button
@@ -216,7 +289,7 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
             <ArrowLeft className="size-6" />
           </button>
         )}
-        <h1 className="text-2xl font-bold text-acro-text lg:text-3xl">
+        <h1 className="text-3xl font-bold text-acro-text lg:text-4xl">
           {STEPS[step - 1]}
         </h1>
       </header>
@@ -235,34 +308,33 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
 
       {step === 1 && (
         <div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => setCategoria(null)}
-              className={cn(
-                "rounded-xl px-3 py-3 text-sm font-medium",
-                categoria === null
-                  ? "bg-acro-accent text-acro-dark"
-                  : "bg-acro-surface text-acro-text hover:bg-white/5",
-              )}
-            >
-              Todas
-            </button>
-            {categorias.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCategoria(c.id)}
-                className={cn(
-                  "rounded-xl px-3 py-3 text-sm font-medium",
-                  categoria === c.id
-                    ? "bg-acro-accent text-acro-dark"
-                    : "bg-acro-surface text-acro-text hover:bg-white/5",
-                )}
-              >
-                {c.nombre}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {cards.map((c) => {
+              const Icon = c.icon;
+              const active = selected === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setSelected(c.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex h-28 flex-col justify-between rounded-2xl border p-4 text-left transition-colors",
+                    active
+                      ? "border-transparent bg-acro-accent text-acro-dark"
+                      : "border-border bg-acro-surface text-acro-text hover:bg-white/5",
+                  )}
+                >
+                  <span className="text-lg font-semibold">{c.nombre}</span>
+                  <Icon
+                    className={cn(
+                      "size-10 self-end",
+                      active ? "text-acro-dark" : "text-acro-muted",
+                    )}
+                  />
+                </button>
+              );
+            })}
           </div>
 
           <div className="relative my-4">
@@ -270,19 +342,38 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto"
+              placeholder={isPlanes ? "Buscar plan" : "Buscar producto"}
               className="h-12 bg-acro-surface pl-11"
             />
           </div>
 
-          {isLoading ? (
+          {isPlanes ? (
+            planesFiltrados.length === 0 ? (
+              <p className="py-8 text-center text-acro-muted">Sin planes.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {planesFiltrados.map((p) => (
+                  <PlanCard
+                    key={p.id}
+                    plan={p}
+                    added={cart.some((i) => i.key === `plan-${p.id}`)}
+                    onAdd={() => addPlan(p)}
+                  />
+                ))}
+              </div>
+            )
+          ) : isLoading ? (
             <p className="py-8 text-center text-acro-muted">Cargando…</p>
           ) : !productos || productos.length === 0 ? (
             <p className="py-8 text-center text-acro-muted">Sin productos.</p>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {productos.map((p) => (
-                <ProductCard key={p.id} producto={p} onAdd={addToCart} />
+                <ProductCard
+                  key={p.id}
+                  producto={p}
+                  onAdd={(qty) => addProducto(p, qty)}
+                />
               ))}
             </div>
           )}
@@ -299,27 +390,34 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
             <ul className="flex flex-col gap-3">
               {cart.map((i) => (
                 <li
-                  key={i.id}
+                  key={i.key}
                   className="flex items-center justify-between gap-3 rounded-2xl bg-acro-surface p-4"
                 >
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-acro-text">
                       {i.nombre}
+                      {i.kind === "plan" && (
+                        <span className="ml-2 rounded bg-acro-accent/20 px-2 py-0.5 text-xs text-acro-accent">
+                          Plan
+                        </span>
+                      )}
                     </h3>
                     <p className="text-sm text-acro-muted">
                       {money(i.precio)} c/u · {money(i.precio * i.cantidad)}
                     </p>
-                    <div className="mt-2">
-                      <Stepper
-                        value={i.cantidad}
-                        onDecrement={() => setQty(i.id, i.cantidad - 1)}
-                        onIncrement={() => setQty(i.id, i.cantidad + 1)}
-                      />
-                    </div>
+                    {i.kind === "producto" && (
+                      <div className="mt-2">
+                        <Stepper
+                          value={i.cantidad}
+                          onDecrement={() => setQty(i.key, i.cantidad - 1)}
+                          onIncrement={() => setQty(i.key, i.cantidad + 1)}
+                        />
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFromCart(i.id)}
+                    onClick={() => removeFromCart(i.key)}
                     aria-label={`Quitar ${i.nombre}`}
                     className="flex size-10 items-center justify-center rounded-lg bg-acro-dark text-acro-danger hover:bg-white/10"
                   >
@@ -343,29 +441,6 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
           }}
           className="flex flex-col gap-5"
         >
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-base font-semibold text-acro-text">
-              Tipo de venta
-            </legend>
-            <div className="flex gap-3">
-              {["Externa", "Interna"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTipoVenta(t)}
-                  className={cn(
-                    "flex-1 rounded-xl py-2.5 font-medium",
-                    tipoVenta === t
-                      ? "bg-acro-accent text-acro-dark"
-                      : "bg-acro-surface text-acro-text hover:bg-white/5",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
           <div className="flex flex-col gap-2">
             <Label className="text-base text-acro-text">Categoría</Label>
             <Select value={categoriaPrecio} onValueChange={setCategoriaPrecio}>
@@ -384,20 +459,10 @@ export default function TiendaWizard({ categorias = [], promos = [], miembros = 
 
           <div className="flex flex-col gap-2">
             <Label className="text-base text-acro-text">
-              Nombre y Apellido {tipoVenta === "Interna" && <span className="text-acro-accent">*</span>}
+              Nombre y Apellido{" "}
+              {hasPlan && <span className="text-acro-accent">*</span>}
             </Label>
-            <Select value={idMiembro} onValueChange={setIdMiembro}>
-              <SelectTrigger className="h-12 w-full bg-acro-surface">
-                <SelectValue placeholder="Selecciona un miembro (opcional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {miembros.map((m) => (
-                  <SelectItem key={m.id} value={String(m.id)}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MemberCombobox value={miembro} onChange={setMiembro} />
           </div>
 
           <fieldset className="rounded-xl border border-border p-4">

@@ -37,6 +37,22 @@ export async function listProductos({ search, categoria } = {}) {
   return (data ?? []).map(mapProducto);
 }
 
+export async function listPlanes() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("planes")
+    .select("id_plan, nombre, precio_usd, pases_totales, duracion_dias")
+    .order("precio_usd");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((p) => ({
+    id: p.id_plan,
+    nombre: p.nombre,
+    precio: Number(p.precio_usd ?? 0),
+    pasesTotales: p.pases_totales ?? 0,
+    duracionDias: p.duracion_dias ?? 0,
+  }));
+}
+
 export async function listCategoriasProducto() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -80,23 +96,30 @@ export async function crearVenta(input) {
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) throw new Error("El carrito está vacío.");
 
-  const tipoVenta = input.tipoVenta === "Interna" ? "Interna" : "Externa";
-  if (tipoVenta === "Interna" && !input.idMiembro) {
-    throw new Error("Selecciona el miembro para una venta interna.");
+  const productItems = items.filter((i) => i.idProducto);
+  const planItems = items.filter((i) => i.idPlan);
+
+  // Un plan debe asignarse a un miembro (se le crea la suscripción).
+  if (planItems.length > 0 && !input.idMiembro) {
+    throw new Error("Selecciona el miembro para vender un plan.");
   }
 
   // Cargar productos reales para validar precio y stock (no confiar en el cliente).
-  const ids = items.map((i) => i.idProducto);
-  const { data: productos, error: prodError } = await supabase
-    .from("productos")
-    .select("id_producto, nombre, precio_venta_usd, stock_sistema")
-    .in("id_producto", ids);
-  if (prodError) throw new Error(prodError.message);
+  const productoIds = productItems.map((i) => i.idProducto);
+  let productos = [];
+  if (productoIds.length > 0) {
+    const { data, error: prodError } = await supabase
+      .from("productos")
+      .select("id_producto, nombre, precio_venta_usd, stock_sistema")
+      .in("id_producto", productoIds);
+    if (prodError) throw new Error(prodError.message);
+    productos = data ?? [];
+  }
 
   const byId = new Map(productos.map((p) => [p.id_producto, p]));
   const detalle = [];
   let subtotal = 0;
-  for (const item of items) {
+  for (const item of productItems) {
     const prod = byId.get(item.idProducto);
     if (!prod) throw new Error("Un producto del carrito ya no existe.");
     const cantidad = Math.max(1, Number(item.cantidad) || 1);
@@ -106,6 +129,27 @@ export async function crearVenta(input) {
     const precio = Number(prod.precio_venta_usd);
     subtotal += precio * cantidad;
     detalle.push({ prod, cantidad, precio });
+  }
+
+  // Cargar planes reales.
+  const planIds = planItems.map((i) => i.idPlan);
+  let planes = [];
+  if (planIds.length > 0) {
+    const { data, error: planError } = await supabase
+      .from("planes")
+      .select("id_plan, nombre, precio_usd, pases_totales, duracion_dias")
+      .in("id_plan", planIds);
+    if (planError) throw new Error(planError.message);
+    planes = data ?? [];
+  }
+  const planById = new Map(planes.map((p) => [p.id_plan, p]));
+  const detallePlanes = [];
+  for (const item of planItems) {
+    const plan = planById.get(item.idPlan);
+    if (!plan) throw new Error("Un plan del carrito ya no existe.");
+    const precio = Number(plan.precio_usd);
+    subtotal += precio;
+    detallePlanes.push({ plan, precio });
   }
 
   // Promoción (descuento porcentual sobre el subtotal).
@@ -129,7 +173,6 @@ export async function crearVenta(input) {
       id_comprador: input.idMiembro || null,
       id_vendedor: employee.id_persona,
       id_evento: input.idPromo || null,
-      tipo_venta: tipoVenta,
       forma_pago: input.formaPago || null,
       moneda: input.moneda || "USD",
       total_usd: total,
@@ -139,7 +182,7 @@ export async function crearVenta(input) {
     .single();
   if (ventaError) throw new Error(ventaError.message);
 
-  // Detalle + movimientos de inventario + descuento de stock.
+  // Detalle de productos + movimientos de inventario + descuento de stock.
   for (const d of detalle) {
     await supabase.from("detalle_venta").insert({
       id_venta: venta.id_venta,
@@ -161,11 +204,33 @@ export async function crearVenta(input) {
     });
   }
 
+  // Detalle de planes + creación de la suscripción del miembro.
+  for (const dp of detallePlanes) {
+    await supabase.from("detalle_venta").insert({
+      id_venta: venta.id_venta,
+      id_plan: dp.plan.id_plan,
+      cantidad: 1,
+      precio_unit_usd: dp.precio,
+      tipo_item: "Plan",
+    });
+    const inicio = new Date();
+    const expira = new Date(inicio);
+    expira.setDate(expira.getDate() + (dp.plan.duracion_dias ?? 0));
+    await supabase.from("suscripciones").insert({
+      id_miembro: input.idMiembro,
+      id_plan: dp.plan.id_plan,
+      fecha_inicio: inicio.toISOString().slice(0, 10),
+      fecha_expiracion: expira.toISOString().slice(0, 10),
+      pases_restantes: dp.plan.pases_totales ?? 0,
+      estado: "Activo",
+    });
+  }
+
   return {
     id: venta.id_venta,
     subtotal,
     descuento,
     total,
-    items: detalle.length,
+    items: detalle.length + detallePlanes.length,
   };
 }
